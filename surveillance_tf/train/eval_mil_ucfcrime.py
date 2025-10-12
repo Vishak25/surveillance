@@ -11,7 +11,7 @@ import tensorflow as tf
 
 from surveillance_tf.data.dcsass_loader import make_bag_dataset
 from surveillance_tf.utils.logging import get_logger
-from surveillance_tf.utils.metrics import plot_roc, roc_auc
+from surveillance_tf.utils.metrics import histogram_scores, plot_roc, roc_auc
 from surveillance_tf.utils.paths import resolve_dcsass_root
 from surveillance_tf.utils.seed import set_global_seed
 
@@ -24,6 +24,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--test_csv", type=Path, help="Optional CSV overriding the test split.")
     parser.add_argument("--ckpt", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--mil_mode", choices=("oneclass", "posneg"), default=None)
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--image_size", type=int, nargs=2, default=(224, 224))
     parser.add_argument("--T", type=int, default=32)
@@ -86,15 +87,27 @@ def main(argv: Iterable[str] | None = None) -> None:
 
     labels_arr = np.array(labels)
     scores_arr = np.array(scores)
-    auc_value = roc_auc(labels_arr, scores_arr)
-    plot_roc(labels_arr, scores_arr, out_dir / "roc_curve.png")
+    unique_labels = np.unique(labels_arr)
+    auc_value: float | None = None
+    if unique_labels.size >= 2:
+        auc_value = roc_auc(labels_arr, scores_arr)
+        plot_roc(labels_arr, scores_arr, out_dir / "roc_curve.png")
+    else:
+        LOGGER.warning(
+            "Evaluation labels contain a single class (%s); skipping ROC-AUC.",
+            unique_labels[0] if unique_labels.size == 1 else "unknown",
+        )
+    histogram_scores(scores_arr, out_dir / "score_hist.png")
 
     with (out_dir / "scores.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["label", "score"])
         writer.writerows(zip(labels, scores))
 
-    LOGGER.info("Evaluation complete. AUC=%.4f", auc_value)
+    if auc_value is not None:
+        LOGGER.info("Evaluation complete. AUC=%.4f", auc_value)
+    else:
+        LOGGER.info("Evaluation complete. Scores written to %s (AUC skipped).", out_dir / "scores.csv")
 
 
 if __name__ == "__main__":

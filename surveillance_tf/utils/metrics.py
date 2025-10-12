@@ -54,4 +54,21 @@ def plot_roc(y_true: np.ndarray, y_score: np.ndarray, out_png_path: str | Path) 
     return out_path
 
 
-__all__ = ["roc_auc", "ttfa", "plot_roc"]
+def histogram_scores(scores: np.ndarray, out_png_path: str | Path, bins: int = 20) -> Path:
+    """Plot histogram of anomaly scores and save to disk."""
+    out_path = Path(out_png_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.figure(figsize=(6, 4))
+    plt.hist(scores, bins=bins, color="#1f77b4", edgecolor="black", alpha=0.75)
+    plt.xlabel("Anomaly Score")
+    plt.ylabel("Frequency")
+    plt.title("Score Distribution")
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    LOGGER.info("Saved score histogram to %s", out_path)
+    return out_path
+
+
+__all__ = ["roc_auc", "ttfa", "plot_roc", "histogram_scores"]

@@ -1,3 +1,33 @@
+Metadata-Version: 2.4
+Name: surveillance_tf
+Version: 0.1.0
+Summary: TensorFlow MIL anomaly detection reproduction with DCSASS demo
+Author: Surveillance TF Team
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: tensorflow>=2.12
+Requires-Dist: tensorflow-hub
+Requires-Dist: opencv-python
+Requires-Dist: imageio
+Requires-Dist: imageio-ffmpeg
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: scikit-learn
+Requires-Dist: pandas
+Requires-Dist: streamlit
+Requires-Dist: weasyprint
+Requires-Dist: jinja2
+Requires-Dist: pyyaml
+Requires-Dist: rich
+Requires-Dist: tqdm
+Requires-Dist: matplotlib
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Dynamic: license-file
+
 # Surveillance-TF
 
 Reproducible TensorFlow 2.x implementation of the multiple-instance learning anomaly detector from Sultani et al. (CVPR 2018), extended with a DCSASS-based runtime demo that performs sliding-window inference, incident management, evidence clipping, and PDF reporting via Streamlit.
@@ -11,62 +41,37 @@ Reproducible TensorFlow 2.x implementation of the multiple-instance learning ano
    pip install -e .
    ```
 2. **Datasets**
-   - **DCSASS**: authenticate with Kaggle, then generate stratified splits if `metadata.csv` is absent:
-     ```bash
-     python -m surveillance_tf.data.dcsass_loader \
-       --data_root ./data/dcsass \
-       --make_splits ./data/dcsass/splits
-     ```
-3. **Training (DCSASS default)**
+   - **DCSASS**: authenticate with Kaggle, then run `python -m surveillance_tf.data.dcsass_loader --download ./data/dcsass`. After extracting the dataset, create CSV splits via `python -m surveillance_tf.data.dcsass_loader --data_root ./data/dcsass --make_splits ./data/dcsass/splits`.
+   - **UCF-Crime**: request access from [http://crcv.ucf.edu/data/UCF-Crime/](http://crcv.ucf.edu/data/UCF-Crime/). Extract videos under `data/ucf_crime/` and build split CSVs matching `video,label` columns.
+3. **Training**
    ```bash
    python -m surveillance_tf.train.train_mil_ucfcrime \
-     --data_root ./data/dcsass \
-     --train_csv ./data/dcsass/splits/train.csv \
-     --val_csv   ./data/dcsass/splits/val.csv \
-     --out ./outputs/dcsass_run1
+     --data_root ./data/ucf_crime \
+     --train_csv ./data/ucf_crime/train.csv \
+     --val_csv ./data/ucf_crime/val.csv \
+     --out ./outputs/ucf_run1
    ```
-4. **Evaluation (DCSASS)**
+4. **Evaluation**
    ```bash
    python -m surveillance_tf.train.eval_mil_ucfcrime \
-     --data_root ./data/dcsass \
-     --test_csv ./data/dcsass/splits/test.csv \
+     --data_root ./data/ucf_crime \
+     --test_csv ./data/ucf_crime/test.csv \
      --ckpt ./models/movinet/ckpt_best \
-     --out ./outputs/dcsass_run1
+     --out ./outputs/ucf_run1
    ```
 5. **Demo**
    ```bash
    python -m surveillance_tf.demo.coord \
-     --data_root ./data/dcsass \
-     --video "./data/dcsass/sample/*.mp4" \
+     --video ./samples/entrance.mp4 \
      --ckpt ./models/movinet/ckpt_best \
-     --config ./configs/thresholds.yaml --fps 25
+     --config ./configs/thresholds.yaml \
+     --fps 25
    ```
 6. **Streamlit UI**
    ```bash
    python -m streamlit run surveillance_tf/demo/ui_app.py
    ```
 
-## One-Class MIL (DCSASS)
-The one-class MIL objective contrasts the mean of the top-k segment scores in each abnormal bag against the mean of the bottom-k scores, while sparsity and temporal smoothness regularisers encourage concise, coherent activations. This lets the model learn directly from anomalous videos without needing explicit normal footage. The legacy positive/negative MIL path remains available for datasets with both classes (e.g., UCF-Crime) via `--mil_mode posneg`.
-
-Train One-Class MIL on DCSASS:
-```bash
-python -m surveillance_tf.train.train_mil_ucfcrime \
-  --dataset dcsass --data_root ./data/dcsass \
-  --train_csv ./data/dcsass/splits/train.csv \
-  --val_csv   ./data/dcsass/splits/val.csv \
-  --out ./outputs/dcsass_ocmil \
-  --mil_mode oneclass --k 3 --margin 1.0 --epochs 10
-```
-
-## Dataset Layout
-```
-data/
-└── dcsass/
-    ├── DCSASS Dataset/
-    ├── sample/
-    └── metadata.csv (optional)
-```
 ## Repository Map
 - `configs/` – Operating thresholds, camera metadata, class labels.
 - `surveillance_tf/utils/` – Logging, seeding, metrics, geometric utilities, buffering, clip writers.
