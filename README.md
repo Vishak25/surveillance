@@ -59,6 +59,32 @@ python -m surveillance_tf.train.train_mil_ucfcrime \
   --mil_mode oneclass --k 3 --margin 1.0 --epochs 10
 ```
 
+## Experiment Configuration & Tracking
+- Hyperparameters can be centralised in YAML (see `configs/experiments/oneclass_dcsass.yaml`). Load them with `--config_yaml` and optionally override any value via the CLI:
+  ```bash
+  python -m surveillance_tf.train.train_mil_ucfcrime \
+    --config_yaml ./configs/experiments/oneclass_dcsass.yaml \
+    --epochs 15  # overrides YAML value
+  ```
+- To log runs to Weights & Biases, install `wandb` and pass tracking flags:
+  ```bash
+  python -m surveillance_tf.train.train_mil_ucfcrime \
+    --config_yaml ./configs/experiments/oneclass_dcsass.yaml \
+    --experiment_tracker wandb \
+    --wandb_project surveillance-mil --run_name ocmil_baseline
+  ```
+  Metrics logged to TensorBoard are mirrored to the tracker, and the best SavedModel checkpoint is uploaded as an artifact.
+
+## Data Validation
+Before long training runs, verify that split CSVs reference valid videos:
+```bash
+python -m surveillance_tf.data.validate \
+  --data_root ./data/dcsass \
+  --splits train val test \
+  --max_frames 1
+```
+The validator checks that each file exists, has non-zero size, and can be decoded via `imageio`. Use `--max_videos` for spot checks on large datasets or supply explicit CSV paths with `--csv`.
+
 ## Dataset Layout
 ```
 data/

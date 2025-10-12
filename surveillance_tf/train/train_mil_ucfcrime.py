@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 import numpy as np
+import yaml
 
 # Configure threading before TensorFlow import to avoid macOS mutex issues
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -37,12 +38,34 @@ except ImportError:  # pragma: no cover - optional dataset support
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    config_parser = argparse.ArgumentParser(add_help=False)
+    config_parser.add_argument(
+        "--config_yaml",
+        type=Path,
+        help="Path to YAML experiment config providing hyperparameters/defaults.",
+    )
+    config_args, remaining = config_parser.parse_known_args(list(argv) if argv is not None else None)
+
+    config_defaults: dict = {}
+    if config_args.config_yaml:
+        config_path = config_args.config_yaml.expanduser().resolve()
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config YAML not found: {config_path}")
+        with config_path.open("r", encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle)
+        if loaded and not isinstance(loaded, dict):
+            raise ValueError(f"Config YAML must contain a mapping at the root: {config_path}")
+        config_defaults = loaded or {}
+
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        parents=[config_parser],
+    )
     parser.add_argument("--dataset", choices=("dcsass", "ucfcrime"), default="dcsass")
     parser.add_argument("--data_root", type=Path, default=None, help="Dataset root (defaults to ./data/dcsass).")
     parser.add_argument("--train_csv", type=Path, help="Optional CSV overriding the training split.")
     parser.add_argument("--val_csv", type=Path, help="Optional CSV overriding the validation split.")
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=None, help="Training output directory.")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--mil_mode", choices=("oneclass", "posneg"), default=None)
@@ -56,7 +79,28 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--image_size", type=int, nargs=2, default=(224, 224))
     parser.add_argument("--T", type=int, default=32)
     parser.add_argument("--stride", type=int, default=3)
-    return parser.parse_args(list(argv) if argv is not None else None)
+    parser.add_argument(
+        "--experiment_tracker",
+        choices=("none", "wandb"),
+        default="none",
+        help="Optional experiment tracker integration.",
+    )
+    parser.add_argument("--wandb_project", type=str, help="Weights & Biases project name.")
+    parser.add_argument("--wandb_entity", type=str, help="Weights & Biases entity (team) name.")
+    parser.add_argument("--wandb_dir", type=Path, help="Weights & Biases run directory override.")
+    parser.add_argument("--wandb_tags", type=str, nargs="*", default=None, help="Optional W&B tags.")
+    parser.add_argument("--run_name", type=str, help="Human-readable experiment/run identifier.")
+
+    valid_dests = {action.dest for action in parser._actions if action.dest != "help"}
+    applicable_defaults = {k: v for k, v in config_defaults.items() if k in valid_dests}
+    unused_keys = sorted(set(config_defaults.keys()) - set(applicable_defaults.keys()))
+    if applicable_defaults:
+        parser.set_defaults(**applicable_defaults)
+
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    args.loaded_config = config_defaults
+    args.unused_config_keys = unused_keys
+    return args
 
 
 def _ensure_positive_negative(entries: List[dict]) -> None:
@@ -105,12 +149,115 @@ def _select_loaders(dataset: str):
     raise ValueError(f"Unsupported dataset '{dataset}'.")
 
 
+def _coerce_arg_types(args: argparse.Namespace) -> None:
+    path_fields = ("data_root", "train_csv", "val_csv", "out", "wandb_dir", "config_yaml")
+    for field in path_fields:
+        value = getattr(args, field, None)
+        if value is not None and not isinstance(value, Path):
+            setattr(args, field, Path(value))
+
+    int_fields = ("epochs", "k", "freeze_backbone_until", "seed", "batch_size", "T", "stride")
+    for field in int_fields:
+        value = getattr(args, field, None)
+        if value is not None and not isinstance(value, int):
+            setattr(args, field, int(value))
+
+    float_fields = ("lr", "margin", "lambda_sparse", "lambda_smooth")
+    for field in float_fields:
+        value = getattr(args, field, None)
+        if value is not None and not isinstance(value, float):
+            setattr(args, field, float(value))
+
+    if isinstance(args.image_size, (list, tuple)):
+        args.image_size = tuple(int(v) for v in args.image_size)
+    else:
+        args.image_size = (224, 224)
+
+
+def _build_run_config(args: argparse.Namespace) -> dict:
+    config = {
+        "dataset": args.dataset,
+        "data_root": str(args.data_root) if args.data_root else None,
+        "train_csv": str(args.train_csv) if args.train_csv else None,
+        "val_csv": str(args.val_csv) if args.val_csv else None,
+        "out": str(args.out) if args.out else None,
+        "epochs": args.epochs,
+        "lr": args.lr,
+        "mil_mode": args.mil_mode,
+        "k": args.k,
+        "margin": args.margin,
+        "lambda_sparse": args.lambda_sparse,
+        "lambda_smooth": args.lambda_smooth,
+        "freeze_backbone_until": args.freeze_backbone_until,
+        "seed": args.seed,
+        "batch_size": args.batch_size,
+        "image_size": list(args.image_size),
+        "T": args.T,
+        "stride": args.stride,
+        "experiment_tracker": args.experiment_tracker,
+        "run_name": args.run_name,
+    }
+    if args.config_yaml:
+        config["config_yaml"] = str(args.config_yaml)
+    if getattr(args, "loaded_config", None):
+        config["config_defaults"] = args.loaded_config
+    return config
+
+
+def _init_experiment_tracker(args: argparse.Namespace, run_config: dict):
+    if args.experiment_tracker == "none":
+        return None, None
+    if args.experiment_tracker == "wandb":
+        try:
+            import wandb
+        except ImportError as exc:  # pragma: no cover - optional dep
+            LOGGER.error("Weights & Biases requested but package not installed: %s", exc)
+            return None, None
+        if not args.wandb_project:
+            LOGGER.error("Weights & Biases enabled but --wandb_project missing.")
+            return None, None
+        init_kwargs = {
+            "project": args.wandb_project,
+            "entity": args.wandb_entity,
+            "name": args.run_name,
+            "dir": str(args.wandb_dir) if args.wandb_dir else None,
+            "tags": args.wandb_tags,
+            "config": run_config,
+        }
+        LOGGER.info("Initialising Weights & Biases run (project=%s, name=%s)", args.wandb_project, args.run_name)
+        run = wandb.init(**{k: v for k, v in init_kwargs.items() if v is not None})
+        return run, wandb
+    LOGGER.warning("Unsupported experiment tracker '%s'; continuing without tracking.", args.experiment_tracker)
+    return None, None
+
+
 def main(argv: Iterable[str] | None = None) -> None:
     args = parse_args(argv)
+    _coerce_arg_types(args)
+
+    if args.unused_config_keys:
+        LOGGER.warning(
+            "Ignored config keys without corresponding CLI arguments: %s",
+            ", ".join(args.unused_config_keys),
+        )
+
+    if args.out is None:
+        raise ValueError("Output directory must be specified via --out or the config YAML.")
+    args.out = args.out.expanduser().resolve()
+    if args.config_yaml:
+        args.config_yaml = args.config_yaml.expanduser().resolve()
+
     set_global_seed(args.seed)
 
     if args.mil_mode is None:
         args.mil_mode = "oneclass" if args.dataset == "dcsass" else "posneg"
+
+    run_config = _build_run_config(args)
+    tracker_run, tracker_module = _init_experiment_tracker(args, run_config)
+    if tracker_run is not None and args.config_yaml and tracker_module is not None:
+        config_artifact = tracker_module.Artifact("training-config", type="config")
+        config_artifact.add_file(str(args.config_yaml))
+        tracker_run.log_artifact(config_artifact)
 
     tf.config.threading.set_inter_op_parallelism_threads(1)
     tf.config.threading.set_intra_op_parallelism_threads(1)
@@ -173,6 +320,15 @@ def main(argv: Iterable[str] | None = None) -> None:
         neg_iter = iter(neg_ds.repeat())
         steps_per_epoch = min(n_pos, n_neg)
 
+    if tracker_run is not None:
+        tracker_run.log(
+            {
+                "data/train_entries": len(all_train_entries),
+                "data/steps_per_epoch": steps_per_epoch,
+            },
+            step=0,
+        )
+
     val_ds = make_dataset_fn(
         dataset_root,
         split="val",
@@ -200,6 +356,10 @@ def main(argv: Iterable[str] | None = None) -> None:
     best_auc = 0.0
     best_ckpt_path = model_dir / "ckpt_best"
     global_step = 0
+
+    def log_tracker(metrics: dict, step: int | None = None) -> None:
+        if tracker_run is not None:
+            tracker_run.log(metrics, step=step)
 
     def _maybe_squeeze_first_dim(tensor: tf.Tensor) -> tf.Tensor:
         rank_static = tensor.shape.rank
@@ -311,6 +471,15 @@ def main(argv: Iterable[str] | None = None) -> None:
                     tf.summary.scalar("ocmil/sparsity", sparsity, step=global_step)
                     tf.summary.scalar("ocmil/smoothness", smoothness, step=global_step)
                     tf.summary.scalar("ocmil/total", total, step=global_step)
+                log_tracker(
+                    {
+                        "train/ocmil_ranking": ranking,
+                        "train/ocmil_sparsity": sparsity,
+                        "train/ocmil_smoothness": smoothness,
+                        "train/ocmil_total": total,
+                    },
+                    step=global_step,
+                )
         else:
             for _ in range(steps_per_epoch):
                 pos_batch = next(pos_iter)
@@ -322,9 +491,14 @@ def main(argv: Iterable[str] | None = None) -> None:
                 )
                 total = float(losses["total"].numpy())
                 epoch_totals.append(total)
+                global_step += 1
+                with writer.as_default():
+                    tf.summary.scalar("train/total_loss", total, step=global_step)
+                log_tracker({"train/total_loss": total}, step=global_step)
 
         mean_total = float(np.mean(epoch_totals)) if epoch_totals else float("nan")
         LOGGER.info("Epoch %d/%d [%s]: mean total loss %.5f", epoch, args.epochs, args.mil_mode, mean_total)
+        log_tracker({"train/epoch_total_loss": mean_total}, step=epoch)
 
         if args.mil_mode == "oneclass":
             mean_ranking = float(np.mean(epoch_rankings)) if epoch_rankings else float("nan")
@@ -335,6 +509,14 @@ def main(argv: Iterable[str] | None = None) -> None:
                 tf.summary.scalar("ocmil/epoch_sparsity", mean_sparsity, step=epoch)
                 tf.summary.scalar("ocmil/epoch_smoothness", mean_smooth, step=epoch)
                 tf.summary.scalar("ocmil/epoch_total", mean_total, step=epoch)
+            log_tracker(
+                {
+                    "train/epoch_ranking": mean_ranking,
+                    "train/epoch_sparsity": mean_sparsity,
+                    "train/epoch_smoothness": mean_smooth,
+                },
+                step=epoch,
+            )
 
         val_labels: List[int] = []
         val_scores: List[float] = []
@@ -353,16 +535,26 @@ def main(argv: Iterable[str] | None = None) -> None:
         val_auc: Optional[float] = None
         with writer.as_default():
             tf.summary.scalar("train_loss", mean_total, step=epoch)
+        log_tracker({"train/loss": mean_total}, step=epoch)
 
         if unique_labels.size >= 2:
             val_auc = roc_auc(labels_arr, scores_arr)
             with writer.as_default():
                 tf.summary.scalar("val_auc", val_auc, step=epoch)
+            log_tracker({"val/auc": val_auc}, step=epoch)
         else:
             LOGGER.warning(
                 "Validation split contains only one class (label=%s); skipping ROC-AUC computation.",
                 unique_labels[0] if unique_labels.size == 1 else "unknown",
             )
+
+        log_tracker(
+            {
+                "val/score_mean": float(np.mean(scores_arr)) if scores_arr.size else float("nan"),
+                "val/score_std": float(np.std(scores_arr)) if scores_arr.size else float("nan"),
+            },
+            step=epoch,
+        )
 
         if val_auc is not None and val_auc > best_auc:
             best_auc = val_auc
@@ -378,12 +570,20 @@ def main(argv: Iterable[str] | None = None) -> None:
             state = {"epoch": epoch, "val_auc": best_auc, "encoder_trainable": encoder.trainable}
             with (model_dir / "training_state.json").open("w", encoding="utf-8") as fp:
                 json.dump(state, fp, indent=2)
+            log_tracker({"val/best_auc": best_auc}, step=epoch)
+            if tracker_run is not None and tracker_module is not None:
+                artifact = tracker_module.Artifact(f"mil-best-epoch{epoch}", type="model")
+                artifact.add_dir(str(best_ckpt_path))
+                tracker_run.log_artifact(artifact)
 
     LOGGER.info(
         "Training complete. Best AUC %.4f. Saved checkpoint to %s",
         best_auc,
         best_ckpt_path,
     )
+    if tracker_run is not None:
+        tracker_run.summary["best_val_auc"] = best_auc
+        tracker_run.finish()
 
 
 if __name__ == "__main__":
