@@ -1,0 +1,34 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env/
+.venv/
+venv/
+
+# Editors
+*.swp
+.DS_Store
+.idea/
+.vscode/
+
+# Data and outputs
+data/
+outputs/
+datasets/
+logs/
+checkpoints/
+*.sqlite
+reports/
+
+# TensorBoard
+*.tfevents.*
+
+# Streamlit
+.streamlit/
+
+# FFmpeg temp files
+*.tmp.mp4
+*.tmp.mov

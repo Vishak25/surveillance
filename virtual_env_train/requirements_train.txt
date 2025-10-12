@@ -1,0 +1,12 @@
+tensorflow>=2.12
+tensorflow-hub
+opencv-python
+imageio
+imageio-ffmpeg
+numpy
+scipy
+scikit-learn
+pandas
+pyyaml
+rich
+tqdm

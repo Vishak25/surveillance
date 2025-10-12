@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Incident {{ incident.incident_id }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { color: #b22222; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    .snapshots { display: flex; gap: 12px; margin-top: 24px; }
+    .snapshots img { width: 30%; border: 1px solid #444; }
+    ul { margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Incident {{ incident.incident_id }}</h1>
+  <table>
+    <tr><th>Severity</th><td>{{ incident.severity }}</td></tr>
+    <tr><th>Start (s)</th><td>{{ '%.2f'|format(incident.start_ts) }}</td></tr>
+    <tr><th>End (s)</th><td>{{ '%.2f'|format(incident.end_ts) }}</td></tr>
+    <tr><th>Mean Confidence</th><td>{{ '%.2f'|format(incident.mean_conf) }}</td></tr>
+    <tr><th>Confidence Interval</th><td>{{ '%.2f'|format(incident.ci_low) }} – {{ '%.2f'|format(incident.ci_high) }}</td></tr>
+    <tr><th>Video</th><td>{{ incident.video_path }}</td></tr>
+  </table>
+
+  <h2>Timeline</h2>
+  <ul>
+    {% for entry in incident.history %}
+    <li>{{ '%.2f'|format(entry['timestamp']) }}s → mean {{ '%.2f'|format(entry['mean']) }}, CI [{{ '%.2f'|format(entry['ci_low']) }}, {{ '%.2f'|format(entry['ci_high']) }}]</li>
+    {% endfor %}
+  </ul>
+
+  {% if snapshots %}
+  <h2>Snapshots</h2>
+  <div class="snapshots">
+    {% for snap in snapshots %}
+    <figure>
+      <img src="{{ snap }}" alt="Snapshot" />
+      <figcaption>{{ snap }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "surveillance_tf"
+version = "0.1.0"
+description = "TensorFlow MIL anomaly detection reproduction with DCSASS demo"
+readme = "README.md"
+authors = [{name = "Surveillance TF Team"}]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+  "tensorflow>=2.12",
+  "tensorflow-hub",
+  "opencv-python",
+  "imageio",
+  "imageio-ffmpeg",
+  "numpy",
+  "scipy",
+  "scikit-learn",
+  "pandas",
+  "streamlit",
+  "weasyprint",
+  "jinja2",
+  "pyyaml",
+  "rich",
+  "tqdm",
+  "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+include = ["surveillance_tf", "surveillance_tf.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

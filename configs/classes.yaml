@@ -1,0 +1,19 @@
+binary_labels:
+  - normal
+  - abnormal
+
+multiclass_labels:
+  - Normal
+  - Abuse
+  - Arrest
+  - Arson
+  - Assault
+  - Burglary
+  - Explosion
+  - Fighting
+  - Robbery
+  - RoadAccidents
+  - Shooting
+  - Shoplifting
+  - Stealing
+  - Vandalism
