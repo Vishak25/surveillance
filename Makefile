@@ -11,11 +11,9 @@ env:
 	$(RUN) -m pip install -e .
 
 train:
-	$(RUN) -m surveillance_tf.train.train_mil_ucfcrime \
-		--data_root data/dcsass \
-		--train_csv data/dcsass/splits/train.csv \
-		--val_csv   data/dcsass/splits/val.csv \
-		--out outputs/dcsass_run
+        $(RUN) -m surveillance_tf.train.train_mil_ucfcrime \
+                --config configs/experiments/oneclass_dcsass.yaml \
+                --out outputs/dcsass_run
 
 eval:
 	$(RUN) -m surveillance_tf.train.eval_mil_ucfcrime \

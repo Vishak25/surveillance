@@ -20,9 +20,7 @@ Reproducible TensorFlow 2.x implementation of the multiple-instance learning ano
 3. **Training (DCSASS default)**
    ```bash
    python -m surveillance_tf.train.train_mil_ucfcrime \
-     --data_root ./data/dcsass \
-     --train_csv ./data/dcsass/splits/train.csv \
-     --val_csv   ./data/dcsass/splits/val.csv \
+     --config ./configs/experiments/oneclass_dcsass.yaml \
      --out ./outputs/dcsass_run1
    ```
 4. **Evaluation (DCSASS)**
@@ -47,33 +45,23 @@ Reproducible TensorFlow 2.x implementation of the multiple-instance learning ano
    ```
 
 ## One-Class MIL (DCSASS)
-The one-class MIL objective contrasts the mean of the top-k segment scores in each abnormal bag against the mean of the bottom-k scores, while sparsity and temporal smoothness regularisers encourage concise, coherent activations. This lets the model learn directly from anomalous videos without needing explicit normal footage. The legacy positive/negative MIL path remains available for datasets with both classes (e.g., UCF-Crime) via `--mil_mode posneg`.
+The one-class MIL objective contrasts the mean of the top-k segment scores in each abnormal bag against the mean of the bottom-k scores, while sparsity and temporal smoothness regularisers encourage concise, coherent activations. This lets the model learn directly from anomalous videos without needing explicit normal footage. If you have curated normal/abnormal pairs you can still switch to the classic positive/negative MIL formulation by setting `--mil_mode posneg`.
 
 Train One-Class MIL on DCSASS:
 ```bash
 python -m surveillance_tf.train.train_mil_ucfcrime \
-  --dataset dcsass --data_root ./data/dcsass \
-  --train_csv ./data/dcsass/splits/train.csv \
-  --val_csv   ./data/dcsass/splits/val.csv \
-  --out ./outputs/dcsass_ocmil \
-  --mil_mode oneclass --k 3 --margin 1.0 --epochs 10
+  --config ./configs/experiments/oneclass_dcsass.yaml \
+  --out ./outputs/dcsass_ocmil
 ```
 
-## Experiment Configuration & Tracking
-- Hyperparameters can be centralised in YAML (see `configs/experiments/oneclass_dcsass.yaml`). Load them with `--config_yaml` and optionally override any value via the CLI:
-  ```bash
-  python -m surveillance_tf.train.train_mil_ucfcrime \
-    --config_yaml ./configs/experiments/oneclass_dcsass.yaml \
-    --epochs 15  # overrides YAML value
-  ```
-- To log runs to Weights & Biases, install `wandb` and pass tracking flags:
-  ```bash
-  python -m surveillance_tf.train.train_mil_ucfcrime \
-    --config_yaml ./configs/experiments/oneclass_dcsass.yaml \
-    --experiment_tracker wandb \
-    --wandb_project surveillance-mil --run_name ocmil_baseline
-  ```
-  Metrics logged to TensorBoard are mirrored to the tracker, and the best SavedModel checkpoint is uploaded as an artifact.
+## Experiment Configuration
+Hyperparameters can be centralised in YAML (see `configs/experiments/oneclass_dcsass.yaml`). Load them with `--config` and override any value from the command line:
+```bash
+python -m surveillance_tf.train.train_mil_ucfcrime \
+  --config ./configs/experiments/oneclass_dcsass.yaml \
+  --epochs 5 --lr 5e-5
+```
+The script automatically resolves dataset paths relative to the configuration file and writes TensorBoard logs plus the best checkpoint under `--out` (defaults to `./outputs/dcsass`).
 
 ## Data Validation
 Before long training runs, verify that split CSVs reference valid videos:
