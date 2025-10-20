@@ -47,7 +47,7 @@ surveillance_tf/
 | Module | Purpose | Key args | Example |
 | --- | --- | --- | --- |
 | `python -m surveillance_tf.data.dcsass_loader` | Inspect/split DCSASS | `--data_root`, `--split`, `--csv`, `--make_splits`, `--sample` | `python -m surveillance_tf.data.dcsass_loader --data_root ./data/dcsass --make_splits ./data/dcsass/splits` |
-| `python -m surveillance_tf.train.train_mil_ucfcrime` | Train MIL model | `--data_root`, `--train_csv`, `--val_csv`, `--out`, `--epochs`, `--T`, `--stride`, `--image_size` | `python -m surveillance_tf.train.train_mil_ucfcrime --data_root ./data/dcsass --train_csv ./data/dcsass/splits/train.csv --val_csv ./data/dcsass/splits/val.csv --out ./outputs/dcsass_run1` |
+| `python -m surveillance_tf.train.train_mil_ucfcrime` | Train MIL model | `--config`, `--out`, `--epochs`, `--lr`, `--mil_mode`, `--T`, `--stride`, `--image_size` | `python -m surveillance_tf.train.train_mil_ucfcrime --config ./configs/experiments/oneclass_dcsass.yaml --out ./outputs/dcsass_run1` |
 | `python -m surveillance_tf.train.eval_mil_ucfcrime` | Evaluate MIL model | `--data_root`, `--test_csv`, `--ckpt`, `--out` | `python -m surveillance_tf.train.eval_mil_ucfcrime --data_root ./data/dcsass --test_csv ./data/dcsass/splits/test.csv --ckpt ./models/movinet/ckpt_best --out ./outputs/dcsass_run1` |
 | `python -m surveillance_tf.demo.coord` | CLI incident demo | `--data_root`, `--video`, `--ckpt`, `--config`, `--fps`, `--db`, `--out`, `--passes` | `python -m surveillance_tf.demo.coord --data_root ./data/dcsass --video "./data/dcsass/sample/*.mp4" --ckpt ./models/movinet/ckpt_best --config ./configs/thresholds.yaml --fps 25` |
 | `python -m surveillance_tf.export.save_models` | Export backbone/head | `--output-dir`, `--window`, `--head-units` | `python -m surveillance_tf.export.save_models --output-dir ./models/export` |
@@ -114,7 +114,7 @@ surveillance_tf/
   - `python -m surveillance_tf.demo.coord --data_root ./data/dcsass --video "./data/dcsass/sample/*.mp4" --ckpt ./models/movinet/ckpt_best --config ./configs/thresholds.yaml --fps 25`
 - **With dataset present**:
   1. `python -m surveillance_tf.data.dcsass_loader --data_root ./data/dcsass --make_splits ./data/dcsass/splits`
-  2. `python -m surveillance_tf.train.train_mil_ucfcrime --data_root ./data/dcsass --train_csv ./data/dcsass/splits/train.csv --val_csv ./data/dcsass/splits/val.csv --out ./outputs/dcsass_run1 --epochs 1`
+  2. `python -m surveillance_tf.train.train_mil_ucfcrime --config ./configs/experiments/oneclass_dcsass.yaml --out ./outputs/dcsass_run1 --epochs 1`
   3. `python -m surveillance_tf.train.eval_mil_ucfcrime --data_root ./data/dcsass --test_csv ./data/dcsass/splits/test.csv --ckpt ./models/movinet/ckpt_best --out ./outputs/dcsass_run1`
   4. `python -m surveillance_tf.demo.coord --data_root ./data/dcsass --video "./data/dcsass/sample/*.mp4" --ckpt ./models/movinet/ckpt_best --config ./configs/thresholds.yaml --fps 25`
 
