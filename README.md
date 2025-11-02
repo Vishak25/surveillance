@@ -14,32 +14,41 @@ Reproducible TensorFlow 2.x implementation of the multiple-instance learning ano
    - **DCSASS**: authenticate with Kaggle, then generate stratified splits if `metadata.csv` is absent:
      ```bash
      python -m surveillance_tf.data.dcsass_loader \
-       --data_root ./data/dcsass \
-       --make_splits ./data/dcsass/splits
+       --data_root ./surveillance_tf/data/dcsass \
+       --make_splits ./surveillance_tf/data/dcsass/splits
      ```
-3. **Training (DCSASS default)**
+3. **Model Weights**
+   ```bash
+   python - <<'PY'
+   import kagglehub
+   path = kagglehub.model_download("google/movinet/tensorFlow2/a0-base-kinetics-600-classification")
+   print("MoViNet cached at:", path)
+   PY
+   ```
+   > Ensure your Kaggle credentials are configured (`kaggle.json` or environment variables). The path can be reused via the `MOVINET_MODEL_DIR` environment variable if you prefer to cache the model elsewhere.
+4. **Training (DCSASS default)**
    ```bash
    python -m surveillance_tf.train.train_mil_ucfcrime \
      --config ./configs/experiments/oneclass_dcsass.yaml \
      --out ./outputs/dcsass_run1
    ```
-4. **Evaluation (DCSASS)**
+5. **Evaluation (DCSASS)**
    ```bash
    python -m surveillance_tf.train.eval_mil_ucfcrime \
-     --data_root ./data/dcsass \
-     --test_csv ./data/dcsass/splits/test.csv \
+     --data_root ./surveillance_tf/data/dcsass \
+     --test_csv ./surveillance_tf/data/dcsass/splits/test.csv \
      --ckpt ./models/movinet/ckpt_best \
      --out ./outputs/dcsass_run1
    ```
-5. **Demo**
+6. **Demo**
    ```bash
    python -m surveillance_tf.demo.coord \
-     --data_root ./data/dcsass \
-     --video "./data/dcsass/sample/*.mp4" \
+     --data_root ./surveillance_tf/data/dcsass \
+     --video "./surveillance_tf/data/dcsass/sample/*.mp4" \
      --ckpt ./models/movinet/ckpt_best \
      --config ./configs/thresholds.yaml --fps 25
    ```
-6. **Streamlit UI**
+7. **Streamlit UI**
    ```bash
    python -m streamlit run surveillance_tf/demo/ui_app.py
    ```
@@ -67,7 +76,7 @@ The script automatically resolves dataset paths relative to the configuration fi
 Before long training runs, verify that split CSVs reference valid videos:
 ```bash
 python -m surveillance_tf.data.validate \
-  --data_root ./data/dcsass \
+  --data_root ./surveillance_tf/data/dcsass \
   --splits train val test \
   --max_frames 1
 ```
@@ -75,11 +84,12 @@ The validator checks that each file exists, has non-zero size, and can be decode
 
 ## Dataset Layout
 ```
-data/
-└── dcsass/
-    ├── DCSASS Dataset/
-    ├── sample/
-    └── metadata.csv (optional)
+surveillance_tf/
+└── data/
+    └── dcsass/
+        ├── DCSASS Dataset/
+        ├── sample/
+        └── metadata.csv (optional)
 ```
 ## Repository Map
 - `configs/` – Operating thresholds, camera metadata, class labels.

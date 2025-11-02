@@ -150,7 +150,12 @@ def _expand_videos(pattern: str, dataset_root: Path) -> List[Path]:
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data_root", type=Path, default=None, help="Dataset root (defaults to ./data/dcsass)")
+    parser.add_argument(
+        "--data_root",
+        type=Path,
+        default=None,
+        help="Dataset root (defaults to ./surveillance_tf/data/dcsass)",
+    )
     parser.add_argument("--video", type=str, required=True, help="Video file or glob pattern")
     parser.add_argument("--ckpt", type=Path, required=True)
     parser.add_argument("--config", type=Path, required=True)

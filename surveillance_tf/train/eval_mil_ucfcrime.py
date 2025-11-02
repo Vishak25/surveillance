@@ -14,13 +14,19 @@ from surveillance_tf.utils.logging import get_logger
 from surveillance_tf.utils.metrics import histogram_scores, plot_roc, roc_auc
 from surveillance_tf.utils.paths import resolve_dcsass_root
 from surveillance_tf.utils.seed import set_global_seed
+from tqdm.auto import tqdm
 
 LOGGER = get_logger(__name__)
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data_root", type=Path, default=None, help="Dataset root (defaults to ./data/dcsass).")
+    parser.add_argument(
+        "--data_root",
+        type=Path,
+        default=None,
+        help="Dataset root (defaults to ./surveillance_tf/data/dcsass).",
+    )
     parser.add_argument("--test_csv", type=Path, help="Optional CSV overriding the test split.")
     parser.add_argument("--ckpt", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
@@ -71,7 +77,7 @@ def main(argv: Iterable[str] | None = None) -> None:
 
     model = tf.keras.models.load_model(str(args.ckpt))
 
-    for segments, label, _ in ds:
+    for segments, label, _ in tqdm(ds, desc="Evaluating", unit="video", leave=False):
         outputs = model(segments.to_tensor(), training=False)
         outputs = tf.squeeze(outputs, axis=-1)
         score = float(tf.reduce_max(outputs).numpy()) if tf.size(outputs) > 0 else 0.0

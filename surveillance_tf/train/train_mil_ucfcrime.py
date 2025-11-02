@@ -20,6 +20,12 @@ os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
 os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
 os.environ.setdefault("OPENCV_OPENCL_RUNTIME", "disabled")
 
+# Set ffmpeg path for imageio (Homebrew on Apple Silicon installs to /opt/homebrew)
+if os.path.exists("/opt/homebrew/bin/ffmpeg"):
+    os.environ.setdefault("IMAGEIO_FFMPEG_EXE", "/opt/homebrew/bin/ffmpeg")
+elif os.path.exists("/usr/local/bin/ffmpeg"):
+    os.environ.setdefault("IMAGEIO_FFMPEG_EXE", "/usr/local/bin/ffmpeg")
+
 import tensorflow as tf
 
 from surveillance_tf.data.dcsass_loader import load_split_entries, make_bag_dataset
@@ -30,6 +36,7 @@ from surveillance_tf.utils.logging import get_logger
 from surveillance_tf.utils.metrics import roc_auc
 from surveillance_tf.utils.paths import resolve_dcsass_root
 from surveillance_tf.utils.seed import set_global_seed
+from tqdm.auto import tqdm
 
 LOGGER = get_logger(__name__)
 
@@ -44,7 +51,7 @@ class TrainingConfig:
     files.
     """
 
-    data_root: Path = field(default_factory=lambda: Path("./data/dcsass"))
+    data_root: Path = field(default_factory=lambda: Path("./surveillance_tf/data/dcsass"))
     train_csv: Optional[Path] = None
     val_csv: Optional[Path] = None
     out: Path = field(default_factory=lambda: Path("./outputs/dcsass"))
@@ -91,7 +98,8 @@ class TrainingConfig:
             elif field_info.type is int:
                 setattr(self, name, int(value))
             elif field_info.type is float:
-                setattr(self, name, float(value))
+                # Ensure we convert to float even if YAML loaded as string
+                setattr(self, name, float(str(value)))
             else:
                 setattr(self, name, value)
 
@@ -127,12 +135,14 @@ class TrainingConfig:
         if self.train_csv is None:
             self.train_csv = root / "splits" / "train.csv"
         else:
-            self.train_csv = (self.train_csv if self.train_csv.is_absolute() else (root / self.train_csv)).resolve()
+            train_path = Path(self.train_csv)
+            self.train_csv = (train_path if train_path.is_absolute() else (root / train_path)).resolve()
         if self.val_csv is None:
             self.val_csv = root / "splits" / "val.csv"
         else:
-            self.val_csv = (self.val_csv if self.val_csv.is_absolute() else (root / self.val_csv)).resolve()
-        self.out = self.out.expanduser().resolve()
+            val_path = Path(self.val_csv)
+            self.val_csv = (val_path if val_path.is_absolute() else (root / val_path)).resolve()
+        self.out = Path(self.out).expanduser().resolve()
 
     @property
     def image_size_tuple(self) -> tuple[int, int]:
@@ -382,15 +392,22 @@ def run_training(config: TrainingConfig) -> None:
         epoch_sparse: List[float] = []
         epoch_smooth: List[float] = []
 
+        progress = tqdm(
+            range(steps_per_epoch),
+            desc=f"Epoch {epoch}/{config.epochs}",
+            unit="step",
+            leave=False,
+        )
         if config.mil_mode == "oneclass":
             assert pos_iter is not None
-            for _ in range(steps_per_epoch):
+            for _ in progress:
                 losses = _train_oneclass_step(encoder, head, optimizer, next(pos_iter), encoder.trainable, config)
                 epoch_totals.append(losses["total"])
                 epoch_rank.append(losses["ranking"])
                 epoch_sparse.append(losses["sparsity"])
                 epoch_smooth.append(losses["smoothness"])
                 global_step += 1
+                progress.set_postfix(total=f"{losses['total']:.4f}")
                 with summary_writer.as_default():
                     tf.summary.scalar("train/ocmil_total", losses["total"], step=global_step)
                     tf.summary.scalar("train/ocmil_ranking", losses["ranking"], step=global_step)
@@ -398,12 +415,14 @@ def run_training(config: TrainingConfig) -> None:
                     tf.summary.scalar("train/ocmil_smoothness", losses["smoothness"], step=global_step)
         else:
             assert pos_iter is not None and neg_iter is not None
-            for _ in range(steps_per_epoch):
+            for _ in progress:
                 losses = _train_posneg_step(encoder, head, optimizer, next(pos_iter), next(neg_iter), encoder.trainable, config)
                 epoch_totals.append(losses["total"])
                 global_step += 1
+                progress.set_postfix(total=f"{losses['total']:.4f}")
                 with summary_writer.as_default():
                     tf.summary.scalar("train/total_loss", losses["total"], step=global_step)
+        progress.close()
 
         mean_total = float(np.mean(epoch_totals)) if epoch_totals else float("nan")
         LOGGER.info("Epoch %d mean loss %.5f", epoch, mean_total)

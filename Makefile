@@ -17,15 +17,15 @@ train:
 
 eval:
 	$(RUN) -m surveillance_tf.train.eval_mil_ucfcrime \
-		--data_root data/dcsass \
-		--test_csv data/dcsass/splits/test.csv \
+		--data_root surveillance_tf/data/dcsass \
+		--test_csv surveillance_tf/data/dcsass/splits/test.csv \
 		--ckpt models/movinet/ckpt_best \
 		--out outputs/dcsass_run
 
 demo:
 	$(RUN) -m surveillance_tf.demo.coord \
-		--data_root data/dcsass \
-		--video "data/dcsass/sample/*.mp4" \
+		--data_root surveillance_tf/data/dcsass \
+		--video "surveillance_tf/data/dcsass/sample/*.mp4" \
 		--ckpt models/movinet/ckpt_best \
 		--config configs/thresholds.yaml --fps 25
 

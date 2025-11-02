@@ -9,7 +9,7 @@ set -euo pipefail
 #   Ensure your Kaggle credentials are configured via `kagglehub.login()` or environment variables.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATA_DIR="${SCRIPT_DIR}/../data/dcsass"
+DATA_DIR="${SCRIPT_DIR}/../surveillance_tf/data/dcsass"
 mkdir -p "$DATA_DIR"
 
 # Show which Python is being used (helps with venv confusion)

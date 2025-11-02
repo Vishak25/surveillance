@@ -33,6 +33,8 @@ def _candidate_roots(explicit_root: Optional[Path]) -> List[Path]:
     if env_var:
         candidates.append(_normalize(Path(env_var)))
 
+    # Prefer dataset bundled under the surveillance_tf package before falling back to legacy location.
+    candidates.append(_normalize(Path("surveillance_tf/data/dcsass")))
     candidates.append(_normalize(Path("data/dcsass")))
 
     kaggle_cache = Path.home() / ".cache" / "kagglehub" / "datasets"

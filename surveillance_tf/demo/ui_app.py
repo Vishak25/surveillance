@@ -40,7 +40,7 @@ def _incident_table(db_path: Path) -> pd.DataFrame:
 st.sidebar.header("Configuration")
 default_ckpt = Path("models/movinet/ckpt_best")
 default_config = Path("configs/thresholds.yaml")
-default_video = Path("data/dcsass/sample/*.mp4")
+default_video = Path("surveillance_tf/data/dcsass/sample/*.mp4")
 default_db = Path("outputs/demo/incidents.sqlite")
 default_out = Path("outputs/demo")
 

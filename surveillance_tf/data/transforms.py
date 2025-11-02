@@ -10,8 +10,15 @@ import numpy as np
 
 from ..utils.logging import get_logger
 
-# Allow overriding, but provide a sensible default for environments where ffmpeg lives in /usr/bin.
-os.environ.setdefault("IMAGEIO_FFMPEG_EXE", "/usr/bin/ffmpeg")
+# Set ffmpeg path for imageio - check Homebrew locations first
+if "IMAGEIO_FFMPEG_EXE" not in os.environ:
+    if os.path.exists("/opt/homebrew/bin/ffmpeg"):
+        os.environ["IMAGEIO_FFMPEG_EXE"] = "/opt/homebrew/bin/ffmpeg"
+    elif os.path.exists("/usr/local/bin/ffmpeg"):
+        os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/local/bin/ffmpeg"
+    elif os.path.exists("/usr/bin/ffmpeg"):
+        os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
+
 os.environ.setdefault("OPENCV_OPENCL_RUNTIME", "disabled")
 
 LOGGER = get_logger(__name__)

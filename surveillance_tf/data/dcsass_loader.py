@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
-from sklearn.model_selection import StratifiedShuffleSplit
 import tensorflow as tf
+from sklearn.model_selection import StratifiedShuffleSplit
+from tqdm.auto import tqdm
 from surveillance_tf.utils.logging import get_logger
 from surveillance_tf.utils.paths import list_videos, resolve_dcsass_root
 from surveillance_tf.utils.seed import set_global_seed
@@ -93,17 +94,15 @@ def _write_inferred_splits(root: Path, entries: List[Dict[str, str]]) -> None:
         with csv_path.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
             writer.writerow(["video", "label"])
-            writer.writerows(
-                (Path(entry["path"]).resolve().relative_to(root), entry["label"])
-                for entry in entries
-                if entry.get("split") == split
-            )
-        LOGGER.info(
-            "Wrote inferred %s split with %d entries to %s",
-            split,
-            sum(1 for e in entries if e.get("split") == split),
-            csv_path,
-        )
+            filtered_entries = [entry for entry in entries if entry.get("split") == split]
+            for entry in tqdm(
+                filtered_entries,
+                desc=f"{split.title()} split",
+                unit="video",
+                leave=False,
+            ):
+                writer.writerow((Path(entry["path"]).resolve().relative_to(root), entry["label"]))
+        LOGGER.info("Wrote inferred %s split with %d entries to %s", split, len(filtered_entries), csv_path)
 
 
 def _load_metadata(root: Path, seed: int = 1337) -> List[Dict[str, str]]:
@@ -320,13 +319,20 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     if args.make_splits:
         target = args.make_splits
         target.mkdir(parents=True, exist_ok=True)
+        LOGGER.info("Writing inferred splits to %s", target)
         for split_name in SPLIT_NAMES:
             filtered = [entry for entry in entries if entry.get("split") == split_name]
             csv_path = target / f"{split_name}.csv"
             with csv_path.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.writer(handle)
                 writer.writerow(["video", "label"])
-                writer.writerows((Path(entry["path"]).resolve().relative_to(dataset_root), entry["label"]) for entry in filtered)
+                for entry in tqdm(
+                    filtered,
+                    desc=f"{split_name.title()} split",
+                    unit="video",
+                    leave=False,
+                ):
+                    writer.writerow((Path(entry["path"]).resolve().relative_to(dataset_root), entry["label"]))
             LOGGER.info("Wrote %s with %d entries", csv_path, len(filtered))
 
     if args.sample:

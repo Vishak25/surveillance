@@ -1,9 +1,9 @@
-tensorflow>=2.12
+tensorflow>=2.16,<2.20
 tensorflow-hub
 opencv-python
 imageio
 imageio-ffmpeg
-numpy
+numpy>=2.0,<2.2
 scipy
 scikit-learn
 pandas
@@ -13,4 +13,5 @@ jinja2
 pyyaml
 rich
 tqdm
+kagglehub
 matplotlib

@@ -41,37 +41,76 @@ Reproducible TensorFlow 2.x implementation of the multiple-instance learning ano
    pip install -e .
    ```
 2. **Datasets**
-   - **DCSASS**: authenticate with Kaggle, then run `python -m surveillance_tf.data.dcsass_loader --download ./data/dcsass`. After extracting the dataset, create CSV splits via `python -m surveillance_tf.data.dcsass_loader --data_root ./data/dcsass --make_splits ./data/dcsass/splits`.
-   - **UCF-Crime**: request access from [http://crcv.ucf.edu/data/UCF-Crime/](http://crcv.ucf.edu/data/UCF-Crime/). Extract videos under `data/ucf_crime/` and build split CSVs matching `video,label` columns.
-3. **Training**
+   - **DCSASS**: authenticate with Kaggle, then generate stratified splits if `metadata.csv` is absent:
+     ```bash
+     python -m surveillance_tf.data.dcsass_loader \
+       --data_root ./data/dcsass \
+       --make_splits ./data/dcsass/splits
+     ```
+3. **Training (DCSASS default)**
    ```bash
    python -m surveillance_tf.train.train_mil_ucfcrime \
-     --data_root ./data/ucf_crime \
-     --train_csv ./data/ucf_crime/train.csv \
-     --val_csv ./data/ucf_crime/val.csv \
-     --out ./outputs/ucf_run1
+     --config ./configs/experiments/oneclass_dcsass.yaml \
+     --out ./outputs/dcsass_run1
    ```
-4. **Evaluation**
+4. **Evaluation (DCSASS)**
    ```bash
    python -m surveillance_tf.train.eval_mil_ucfcrime \
-     --data_root ./data/ucf_crime \
-     --test_csv ./data/ucf_crime/test.csv \
+     --data_root ./data/dcsass \
+     --test_csv ./data/dcsass/splits/test.csv \
      --ckpt ./models/movinet/ckpt_best \
-     --out ./outputs/ucf_run1
+     --out ./outputs/dcsass_run1
    ```
 5. **Demo**
    ```bash
    python -m surveillance_tf.demo.coord \
-     --video ./samples/entrance.mp4 \
+     --data_root ./data/dcsass \
+     --video "./data/dcsass/sample/*.mp4" \
      --ckpt ./models/movinet/ckpt_best \
-     --config ./configs/thresholds.yaml \
-     --fps 25
+     --config ./configs/thresholds.yaml --fps 25
    ```
 6. **Streamlit UI**
    ```bash
    python -m streamlit run surveillance_tf/demo/ui_app.py
    ```
 
+## One-Class MIL (DCSASS)
+The one-class MIL objective contrasts the mean of the top-k segment scores in each abnormal bag against the mean of the bottom-k scores, while sparsity and temporal smoothness regularisers encourage concise, coherent activations. This lets the model learn directly from anomalous videos without needing explicit normal footage. If you have curated normal/abnormal pairs you can still switch to the classic positive/negative MIL formulation by setting `--mil_mode posneg`.
+
+Train One-Class MIL on DCSASS:
+```bash
+python -m surveillance_tf.train.train_mil_ucfcrime \
+  --config ./configs/experiments/oneclass_dcsass.yaml \
+  --out ./outputs/dcsass_ocmil
+```
+
+## Experiment Configuration
+Hyperparameters can be centralised in YAML (see `configs/experiments/oneclass_dcsass.yaml`). Load them with `--config` and override any value from the command line:
+```bash
+python -m surveillance_tf.train.train_mil_ucfcrime \
+  --config ./configs/experiments/oneclass_dcsass.yaml \
+  --epochs 5 --lr 5e-5
+```
+The script automatically resolves dataset paths relative to the configuration file and writes TensorBoard logs plus the best checkpoint under `--out` (defaults to `./outputs/dcsass`).
+
+## Data Validation
+Before long training runs, verify that split CSVs reference valid videos:
+```bash
+python -m surveillance_tf.data.validate \
+  --data_root ./data/dcsass \
+  --splits train val test \
+  --max_frames 1
+```
+The validator checks that each file exists, has non-zero size, and can be decoded via `imageio`. Use `--max_videos` for spot checks on large datasets or supply explicit CSV paths with `--csv`.
+
+## Dataset Layout
+```
+data/
+└── dcsass/
+    ├── DCSASS Dataset/
+    ├── sample/
+    └── metadata.csv (optional)
+```
 ## Repository Map
 - `configs/` – Operating thresholds, camera metadata, class labels.
 - `surveillance_tf/utils/` – Logging, seeding, metrics, geometric utilities, buffering, clip writers.

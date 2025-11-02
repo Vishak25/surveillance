@@ -16,6 +16,8 @@ venv/
 
 # Data and outputs
 /data/
+surveillance_tf/data/
+surveillance-tf/data/
 outputs/
 datasets/
 logs/

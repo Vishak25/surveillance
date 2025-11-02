@@ -10,3 +10,4 @@ pandas
 pyyaml
 rich
 tqdm
+kagglehub
