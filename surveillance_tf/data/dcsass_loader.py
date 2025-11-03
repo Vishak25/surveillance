@@ -147,10 +147,20 @@ def _load_metadata(root: Path, seed: int = 1337) -> List[Dict[str, str]]:
         _write_inferred_splits(root, entries)
 
     has_normal = any(entry["label"].lower() == "normal" for entry in entries)
+    class_map: Dict[str, int] = {}
+    if has_normal:
+        for entry in entries:
+            if entry["label"].lower() == "normal":
+                class_map.setdefault(entry["label"].lower(), 0)
+    next_index = max(class_map.values(), default=-1) + 1
     for entry in entries:
-        is_normal = entry["label"].lower() == "normal"
-        entry["binary_label"] = 0 if is_normal else 1
-        if has_normal and is_normal:
+        label_lower = entry["label"].lower()
+        entry["binary_label"] = 0 if label_lower == "normal" else 1
+        if label_lower not in class_map:
+            class_map[label_lower] = next_index
+            next_index += 1
+        entry["class_index"] = class_map[label_lower]
+        if has_normal and label_lower == "normal":
             entry["label_index"] = 0
         else:
             entry["label_index"] = 1
@@ -185,11 +195,13 @@ def _select_entries(entries: List[Dict[str, str]], selected_paths: List[Path], s
         if entry is None:
             label = path.parent.name
             is_normal = label.lower() == "normal"
+            class_index = 0 if is_normal else -1
             selected.append(
                 {
                     "path": str(path),
                     "label": label,
                     "label_index": 0 if is_normal else 1,
+                    "class_index": class_index,
                     "binary_label": 0 if is_normal else 1,
                     "split": split,
                 }
@@ -209,7 +221,31 @@ def _select_entries(entries: List[Dict[str, str]], selected_paths: List[Path], s
                     entry["label_index"] = existing_labels.setdefault(label, next_index)
                     if entry["label_index"] == next_index:
                         next_index += 1
+        unresolved_class = [entry for entry in selected if entry.get("class_index", -1) == -1]
+        if unresolved_class:
+            existing_classes = {entry["label"].lower(): entry.get("class_index", -1) for entry in entries}
+            next_class_index = max(existing_classes.values(), default=-1) + 1
+            for entry in selected:
+                if entry.get("class_index", -1) == -1:
+                    label_lower = entry["label"].lower()
+                    entry["class_index"] = existing_classes.setdefault(label_lower, next_class_index)
+                    if entry["class_index"] == next_class_index:
+                        next_class_index += 1
     return selected
+
+
+def _sample_clip(frames: np.ndarray, T: int) -> np.ndarray:
+    if frames.size == 0:
+        raise ValueError("Decoded clip contains no frames.")
+    total_frames = frames.shape[0]
+    if total_frames == T:
+        return frames
+    if total_frames > T:
+        indices = np.linspace(0, total_frames - 1, num=T, dtype=np.int32)
+        return frames[indices]
+    pad_count = T - total_frames
+    pad = np.repeat(frames[-1][np.newaxis, ...], pad_count, axis=0)
+    return np.concatenate([frames, pad], axis=0)
 
 
 def load_split_entries(
@@ -290,6 +326,61 @@ def make_bag_dataset(
     return ds
 
 
+def make_clip_dataset(
+    root: str | Path,
+    split: str,
+    T: int = 32,
+    batch_size: int = 8,
+    image_size: Tuple[int, int] = (224, 224),
+    seed: int = 1337,
+    csv_path: Optional[str | Path] = None,
+    entries: Optional[Sequence[Dict[str, str]]] = None,
+    shuffle: bool = True,
+    repeat: bool = False,
+) -> Tuple["tf.data.Dataset", List[Dict[str, str]]]:
+    dataset_root = resolve_dcsass_root(root)
+    if entries is not None:
+        entries_list = [entry.copy() for entry in entries]
+    else:
+        entries_list = load_split_entries(dataset_root, split, seed=seed, csv_path=csv_path)
+
+    def generator() -> Iterator[Tuple[np.ndarray, np.int32, np.int32, bytes]]:
+        for entry in entries_list:
+            video_path = Path(entry["path"])
+            try:
+                frames = decode_video_opencv(str(video_path), target_size=image_size)
+            except FileNotFoundError:
+                LOGGER.warning("Skipping missing video %s", video_path)
+                continue
+            if frames.size == 0:
+                LOGGER.warning("Skipping empty video %s", video_path)
+                continue
+            clip = _sample_clip(frames, T=T)
+            clip = clip.astype(np.float32) / 255.0
+            class_index = int(entry.get("class_index", entry.get("label_index", entry.get("binary_label", 0))))
+            yield (
+                clip,
+                np.int32(entry.get("binary_label", 0)),
+                np.int32(class_index),
+                str(video_path).encode("utf-8"),
+            )
+
+    output_signature = (
+        tf.TensorSpec(shape=(T, image_size[0], image_size[1], 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(), dtype=tf.int32),
+        tf.TensorSpec(shape=(), dtype=tf.int32),
+        tf.TensorSpec(shape=(), dtype=tf.string),
+    )
+
+    ds = tf.data.Dataset.from_generator(generator, output_signature=output_signature)
+    if shuffle:
+        ds = ds.shuffle(buffer_size=max(len(entries_list), batch_size), seed=seed, reshuffle_each_iteration=True)
+    if repeat:
+        ds = ds.repeat()
+    ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    return ds, entries_list
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data_root", type=Path, default=None, help="Optional dataset root override.")
@@ -366,4 +457,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["make_bag_dataset", "load_split_entries"]
+__all__ = ["make_bag_dataset", "make_clip_dataset", "load_split_entries"]

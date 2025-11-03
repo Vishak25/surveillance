@@ -1,3 +1,4 @@
+trainer: mil
 data_root: ./surveillance_tf/data/dcsass
 train_csv: splits/train.csv
 val_csv: splits/val.csv
@@ -16,3 +17,5 @@ image_size:
   - 224
 T: 32
 stride: 3
+class_loss_weight: 0.3
+seed: 1337
